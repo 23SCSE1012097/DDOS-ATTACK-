@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DDoS Guard — Attack Detection System</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg: #0a0d14;
+  --bg2: #0f1320;
+  --bg3: #141926;
+  --card: #141926;
+  --card2: #1a2035;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e8eaf0;
+  --text2: #8b90a0;
+  --text3: #555a6a;
+  --red: #ff4757;
+  --red2: #ff6b7a;
+  --amber: #ffa502;
+  --amber2: #ffbe56;
+  --green: #2ed573;
+  --green2: #7bed9f;
+  --blue: #1e90ff;
+  --blue2: #74b9ff;
+  --purple: #a855f7;
+  --cyan: #00d4ff;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Syne', sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;overflow-x:hidden;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ── LAYOUT ── */
+.shell{display:grid;grid-template-columns:220px 1fr;grid-template-rows:56px 1fr;min-height:100vh;}
+.topbar{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;padding:0 20px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;}
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:16px 0;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
+.main{overflow-y:auto;padding:20px;}
+
+/* ── TOPBAR ── */
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-icon{width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--blue),var(--cyan));display:flex;align-items:center;justify-content:center;font-size:16px;}
+.logo-name{font-size:15px;font-weight:800;letter-spacing:-.02em;}
+.logo-name span{color:var(--cyan);}
+.top-right{display:flex;align-items:center;gap:12px;}
+.clock{font-family:var(--mono);font-size:13px;color:var(--text2);}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:blink 2s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+.status-label{font-size:12px;font-weight:600;color:var(--green);}
+.badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;}
+.badge.threat{background:rgba(255,71,87,.12);color:var(--red);border-color:rgba(255,71,87,.3);}
+.btn-top{padding:6px 14px;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:12px;font-family:var(--sans);cursor:pointer;font-weight:600;transition:all .15s;}
+.btn-top:hover{border-color:var(--cyan);color:var(--cyan);}
+
+/* ── SIDEBAR ── */
+.nav-section{padding:0 12px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-top:12px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 16px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text2);border-left:2px solid transparent;transition:all .15s;}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,.03);}
+.nav-item.active{color:var(--cyan);border-left-color:var(--cyan);background:rgba(0,212,255,.06);}
+.nav-item .icon{font-size:16px;width:18px;text-align:center;}
+.nav-badge{margin-left:auto;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(255,71,87,.2);color:var(--red);}
+.nav-badge.green{background:rgba(46,213,115,.15);color:var(--green);}
+
+/* ── VIEWS ── */
+.view{display:none;}
+.view.active{display:block;}
+
+/* ── CARDS ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);}
+.card-title{font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;}
+.card-icon{font-size:15px;}
+.card-body{padding:16px 18px;}
+
+/* ── METRIC CARDS ── */
+.metrics-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;}
+.metric{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;overflow:hidden;transition:border-color .2s;}
+.metric:hover{border-color:var(--border2);}
+.metric::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.metric.red::before{background:var(--red);}
+.metric.amber::before{background:var(--amber);}
+.metric.green::before{background:var(--green);}
+.metric.blue::before{background:var(--blue);}
+.metric.cyan::before{background:var(--cyan);}
+.metric-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px;}
+.metric-val{font-size:26px;font-weight:800;font-family:var(--mono);}
+.metric-val.red{color:var(--red);}
+.metric-val.amber{color:var(--amber);}
+.metric-val.green{color:var(--green);}
+.metric-val.blue{color:var(--blue);}
+.metric-val.cyan{color:var(--cyan);}
+.metric-sub{font-size:11px;color:var(--text3);margin-top:4px;}
+.metric-glow{position:absolute;right:-10px;bottom:-10px;font-size:48px;opacity:.06;}
+
+/* ── GRID LAYOUTS ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.grid3{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px;}
+.grid31{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-bottom:14px;}
+.mb{margin-bottom:14px;}
+
+/* ── IP INSPECTOR ── */
+.ip-search-wrap{display:flex;gap:10px;margin-bottom:16px;}
+.ip-input{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:11px 16px;color:var(--text);font-family:var(--mono);font-size:14px;outline:none;transition:border-color .2s;}
+.ip-input:focus{border-color:var(--cyan);box-shadow:0 0 0 3px rgba(0,212,255,.08);}
+.ip-input::placeholder{color:var(--text3);}
+.btn-scan{padding:11px 24px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--blue),var(--cyan));color:#fff;font-size:13px;font-weight:700;font-family:var(--sans);cursor:pointer;display:flex;align-items:center;gap:8px;transition:opacity .15s;white-space:nowrap;}
+.btn-scan:hover{opacity:.85;}
+.btn-scan.loading{opacity:.6;pointer-events:none;}
+
+
+.ip-result-wrap{border:1px solid var(--border2);border-radius:12px;overflow:hidden;animation:slideIn .3s ease;}
+@keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.ip-result-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--card2);}
+.ip-addr{font-family:var(--mono);font-size:16px;font-weight:700;}
+.status-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;}
+.status-badge.blocked{background:rgba(255,71,87,.15);color:var(--red);border:1px solid rgba(255,71,87,.3);}
+.status-badge.suspicious{background:rgba(255,165,2,.15);color:var(--amber);border:1px solid rgba(255,165,2,.3);}
+.status-badge.clean{background:rgba(46,213,115,.12);color:var(--green);border:1px solid rgba(46,213,115,.25);}
+.status-badge.unknown{background:rgba(255,255,255,.05);color:var(--text2);border:1px solid var(--border);}
+.action-row{display:flex;gap:6px;}
+.action-btn{padding:5px 14px;border-radius:8px;border:1px solid;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);transition:all .15s;}
+.action-btn.block{border-color:rgba(255,71,87,.4);color:var(--red);background:rgba(255,71,87,.08);}
+.action-btn.block:hover{background:rgba(255,71,87,.18);}
+.action-btn.allow{border-color:rgba(46,213,115,.35);color:var(--green);background:rgba(46,213,115,.07);}
+.action-btn.allow:hover{background:rgba(46,213,115,.15);}
+.action-btn.report{border-color:var(--border2);color:var(--text2);background:transparent;}
+.action-btn.report:hover{border-color:var(--cyan);color:var(--cyan);}
+
+.ip-grid{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--border);}
+.ip-cell{padding:12px 18px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);}
+.ip-cell:nth-child(3n){border-right:none;}
+.ip-cell-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:5px;}
+.ip-cell-val{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--text);}
+
+.threat-score-area{padding:16px 18px;border-top:1px solid var(--border);}
+.score-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.score-number{font-size:28px;font-weight:800;font-family:var(--mono);}
+.score-track{height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:10px;}
+.score-fill{height:100%;border-radius:4px;transition:width .6s cubic-bezier(.4,0,.2,1);}
+.score-breakdown{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
+.score-factor{background:var(--bg3);border-radius:8px;padding:8px 10px;border:1px solid var(--border);}
+.score-factor-name{font-size:10px;color:var(--text3);margin-bottom:4px;}
+.score-factor-bar{height:3px;background:var(--bg2);border-radius:2px;overflow:hidden;}
+.score-factor-fill{height:100%;border-radius:2px;}
+.score-factor-val{font-size:11px;font-family:var(--mono);font-weight:700;margin-top:4px;}
+
+.flags-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;}
+.flag-tag{padding:3px 10px;border-radius:10px;font-size:11px;font-weight:600;}
+.flag-tag.red{background:rgba(255,71,87,.15);color:var(--red);border:1px solid rgba(255,71,87,.3);}
+.flag-tag.amber{background:rgba(255,165,2,.12);color:var(--amber);border:1px solid rgba(255,165,2,.25);}
+.flag-tag.blue{background:rgba(30,144,255,.12);color:var(--blue2);border:1px solid rgba(30,144,255,.25);}
+
+/* ── TRAFFIC CHART ── */
+.chart-wrap{position:relative;height:180px;}
+
+/* ── LOG TABLE ── */
+.log-wrap{max-height:320px;overflow-y:auto;}
+table{width:100%;border-collapse:collapse;}
+th{padding:10px 14px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);border-bottom:1px solid var(--border);background:var(--card2);position:sticky;top:0;}
+td{padding:10px 14px;font-size:12px;border-bottom:1px solid var(--border);font-family:var(--mono);}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(255,255,255,.02);}
+.sev{padding:2px 9px;border-radius:8px;font-size:10px;font-weight:700;}
+.sev.critical{background:rgba(255,71,87,.15);color:var(--red);}
+.sev.high{background:rgba(255,165,2,.12);color:var(--amber);}
+.sev.medium{background:rgba(30,144,255,.12);color:var(--blue2);}
+.sev.low{background:rgba(46,213,115,.1);color:var(--green);}
+.act{font-weight:700;}
+.act.blocked{color:var(--red);}
+.act.ratelimit{color:var(--amber);}
+.act.challenged{color:var(--blue2);}
+.act.logged{color:var(--green);}
+
+/* ── GEO LIST ── */
+.geo-list{display:flex;flex-direction:column;gap:10px;}
+.geo-row{display:flex;align-items:center;gap:12px;}
+.geo-flag{font-size:18px;width:24px;text-align:center;}
+.geo-name{font-size:13px;font-weight:600;flex:1;}
+.geo-bar-wrap{width:100px;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;}
+.geo-fill{height:100%;border-radius:3px;}
+.geo-cnt{font-family:var(--mono);font-size:12px;color:var(--text2);min-width:36px;text-align:right;}
+
+/* ── BLOCKED LIST ── */
+.blocked-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;}
+.blocked-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);}
+.blocked-ip{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text);flex:1;}
+.blocked-reason{font-size:11px;color:var(--text3);margin-right:auto;}
+.blocked-time{font-family:var(--mono);font-size:10px;color:var(--text3);}
+.unblock-btn{padding:3px 10px;border-radius:6px;border:1px solid rgba(46,213,115,.3);color:var(--green);background:rgba(46,213,115,.07);font-size:11px;font-weight:700;cursor:pointer;font-family:var(--sans);transition:all .15s;white-space:nowrap;}
+.unblock-btn:hover{background:rgba(46,213,115,.15);}
+
+.manual-block-row{display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);}
+.manual-input{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:9px 14px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;transition:border-color .2s;}
+.manual-input:focus{border-color:var(--red);}
+.btn-block-manual{padding:9px 18px;border-radius:8px;border:1px solid rgba(255,71,87,.4);color:var(--red);background:rgba(255,71,87,.08);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);white-space:nowrap;transition:all .15s;}
+.btn-block-manual:hover{background:rgba(255,71,87,.18);}
+
+/* ── RULES ── */
+.rules-list{display:flex;flex-direction:column;gap:8px;}
+.rule-row{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);}
+.rule-info{display:flex;align-items:center;gap:10px;}
+.rule-icon{font-size:18px;}
+.rule-name{font-size:13px;font-weight:600;}
+.rule-desc{font-size:11px;color:var(--text3);}
+.toggle-wrap{display:flex;align-items:center;gap:8px;}
+.toggle-label{font-size:11px;font-weight:700;}
+.toggle{width:42px;height:24px;border-radius:12px;border:none;cursor:pointer;position:relative;transition:background .25s;}
+.toggle.on{background:var(--green);}
+.toggle.off{background:var(--bg2);}
+.toggle::after{content:'';position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;top:3px;transition:left .25s;}
+.toggle.on::after{left:21px;}
+.toggle.off::after{left:3px;}
+.threshold-input{width:70px;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:4px 8px;color:var(--text);font-family:var(--mono);font-size:12px;text-align:right;outline:none;}
+.threshold-input:focus{border-color:var(--cyan);}
+
+/* ── ATTACK TYPES ── */
+.atk-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.atk-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:12px;}
+.atk-name{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;}
+.atk-val{font-size:20px;font-weight:800;font-family:var(--mono);}
+.atk-desc{font-size:10px;color:var(--text3);margin-top:3px;}
+
+/* ── ALERT BANNER ── */
+.alert-banner{display:none;align-items:center;gap:12px;padding:12px 18px;border-radius:12px;background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.3);margin-bottom:14px;animation:slideIn .3s ease;}
+.alert-banner.show{display:flex;}
+.alert-icon{font-size:20px;flex-shrink:0;}
+.alert-msg{font-size:13px;font-weight:600;color:var(--red2);flex:1;}
+.alert-time{font-family:var(--mono);font-size:11px;color:var(--text3);}
+.dismiss-btn{padding:4px 12px;border-radius:6px;border:1px solid rgba(255,71,87,.3);color:var(--red);background:transparent;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--sans);}
+
+/* ── FILTER PILLS ── */
+.filter-pills{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+.fpill{padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--border2);color:var(--text2);background:transparent;cursor:pointer;font-family:var(--sans);transition:all .15s;}
+.fpill.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+.fpill:hover:not(.active){border-color:var(--text2);}
+
+/* ── SETTINGS PAGE ── */
+.settings-section{margin-bottom:20px;}
+.settings-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px;}
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;}
+.settings-name{font-size:13px;font-weight:600;}
+.settings-desc{font-size:11px;color:var(--text3);margin-top:2px;}
+.settings-select{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:6px 12px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none;cursor:pointer;}
+.settings-input{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:6px 12px;color:var(--text);font-family:var(--mono);font-size:12px;width:140px;outline:none;}
+.settings-input:focus,.settings-select:focus{border-color:var(--cyan);}
+
+/* ── WHITELIST/BLACKLIST TABLES ── */
+.list-area{background:var(--bg3);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:8px;}
+.list-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);}
+.list-add-row{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--border);}
+.list-input{flex:1;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none;}
+.list-input:focus{border-color:var(--cyan);}
+.btn-add{padding:8px 16px;border-radius:8px;border:1px solid rgba(0,212,255,.3);color:var(--cyan);background:rgba(0,212,255,.07);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--sans);}
+.btn-add:hover{background:rgba(0,212,255,.15);}
+.list-item{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--border);}
+.list-item:last-child{border-bottom:none;}
+.list-ip{font-family:var(--mono);font-size:12px;}
+.del-btn{padding:2px 8px;border-radius:5px;border:1px solid rgba(255,71,87,.3);color:var(--red);background:transparent;font-size:10px;font-weight:700;cursor:pointer;font-family:var(--sans);}
+
+/* ── STATISTICS CHARTS PAGE ── */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.stat-chart-wrap{height:200px;position:relative;}
+
+/* ── EXPORT BTN ── */
+.btn-export{padding:7px 18px;border-radius:8px;border:1px solid var(--border2);color:var(--text2);background:transparent;font-size:12px;font-weight:600;cursor:pointer;font-family:var(--sans);transition:all .15s;display:inline-flex;align-items:center;gap:6px;}
+.btn-export:hover{border-color:var(--cyan);color:var(--cyan);}
+
+/* ── MISC ── */
+.section-title{font-size:15px;font-weight:800;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.small-tag{font-size:10px;padding:2px 8px;border-radius:6px;background:rgba(0,212,255,.1);color:var(--cyan);border:1px solid rgba(0,212,255,.2);font-weight:700;}
+.empty{text-align:center;padding:30px;color:var(--text3);font-size:13px;}
+.progress-mini{height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:6px;}
+.progress-fill{height:100%;border-radius:2px;}
+.tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:600;border:1px solid;margin-right:4px;margin-bottom:4px;}
+.tag.red{background:rgba(255,71,87,.1);color:var(--red);border-color:rgba(255,71,87,.25);}
+.tag.amber{background:rgba(255,165,2,.1);color:var(--amber);border-color:rgba(255,165,2,.25);}
+.tag.blue{background:rgba(30,144,255,.1);color:var(--blue2);border-color:rgba(30,144,255,.25);}
+.tag.green{background:rgba(46,213,115,.1);color:var(--green);border-color:rgba(46,213,115,.25);}
+
+@keyframes popIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+.pop{animation:popIn .2s ease;}
+
+/* ── NOTIFICATIONS ── */
+.notif-container{position:fixed;top:70px;right:16px;z-index:999;display:flex;flex-direction:column;gap:8px;}
+.notif{padding:12px 16px;border-radius:10px;border:1px solid;font-size:13px;font-weight:600;max-width:320px;animation:slideInRight .3s ease;display:flex;align-items:center;gap:10px;}
+.notif.error{background:rgba(255,71,87,.15);border-color:rgba(255,71,87,.4);color:var(--red2);}
+.notif.success{background:rgba(46,213,115,.1);border-color:rgba(46,213,115,.3);color:var(--green2);}
+.notif.info{background:rgba(30,144,255,.1);border-color:rgba(30,144,255,.3);color:var(--blue2);}
+@keyframes slideInRight{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:translateX(0)}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-icon">🛡</div>
+      <div>
+        <div class="logo-name">DDoS<span>Guard</span></div>
+      </div>
+    </div>
+    <div class="top-right">
+      <div class="clock" id="clockEl">00:00:00</div>
+      <div id="attackBadge" class="badge threat" style="display:none">⚡ ATTACK DETECTED</div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="status-dot"></div>
+        <div class="status-label">MONITORING</div>
+      </div>
+      <button class="btn-top" onclick="exportReport()">📥 Export Report</button>
+    </div>
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="nav-section">Monitor</div>
+    <div class="nav-item active" onclick="navTo('dashboard',this)"><span class="icon">📊</span> Dashboard</div>
+    <div class="nav-item" onclick="navTo('inspector',this)"><span class="icon">🔍</span> IP Inspector <span class="nav-badge" id="blocked-nav-badge">47</span></div>
+    <div class="nav-item" onclick="navTo('eventlog',this)"><span class="icon">📋</span> Event Log <span class="nav-badge" id="log-nav-badge">7</span></div>
+    <div class="nav-section">Manage</div>
+    <div class="nav-item" onclick="navTo('blocklist',this)"><span class="icon">🚫</span> Block List</div>
+    <div class="nav-item" onclick="navTo('whitelist',this)"><span class="icon">✅</span> White List <span class="nav-badge green" id="white-nav-badge">3</span></div>
+    <div class="nav-item" onclick="navTo('rules',this)"><span class="icon">⚙️</span> Detection Rules</div>
+    <div class="nav-section">Analyze</div>
+    <div class="nav-item" onclick="navTo('statistics',this)"><span class="icon">📈</span> Statistics</div>
+    <div class="nav-item" onclick="navTo('settings',this)"><span class="icon">🔧</span> Settings</div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- NOTIFICATION CONTAINER -->
+    <div class="notif-container" id="notifContainer"></div>
+
+    <!-- ALERT BANNER -->
+    <div class="alert-banner" id="alertBanner">
+      <div class="alert-icon">🚨</div>
+      <div class="alert-msg" id="alertMsg">Critical DDoS Attack Detected!</div>
+      <div class="alert-time" id="alertTime">--:--:--</div>
+      <button class="dismiss-btn" onclick="dismissAlert()">Dismiss</button>
+    </div>
+
+    <!-- ══════════════════ DASHBOARD VIEW ══════════════════ -->
+    <div class="view active" id="view-dashboard">
+      <div class="section-title">📊 Live Dashboard <span class="small-tag">LIVE</span></div>
+
+      <div class="metrics-row">
+        <div class="metric cyan">
+          <div class="metric-label">Requests / sec</div>
+          <div class="metric-val cyan" id="m-rps">2,841</div>
+          <div class="metric-sub" id="m-rps-sub">↑ 12% vs avg</div>
+          <div class="metric-glow">⚡</div>
+        </div>
+        <div class="metric red">
+          <div class="metric-label">Active Attacks</div>
+          <div class="metric-val red" id="m-attacks">3</div>
+          <div class="metric-sub">SYN · HTTP · UDP</div>
+          <div class="metric-glow">🔥</div>
+        </div>
+        <div class="metric amber">
+          <div class="metric-label">Blocked IPs</div>
+          <div class="metric-val amber" id="m-blocked">47</div>
+          <div class="metric-sub" id="m-blocked-sub">+6 in last 10 min</div>
+          <div class="metric-glow">🚫</div>
+        </div>
+        <div class="metric green">
+          <div class="metric-label">Mitigation Rate</div>
+          <div class="metric-val green">98.4%</div>
+          <div class="metric-sub">6 threats neutralized</div>
+          <div class="metric-glow">🛡</div>
+        </div>
+        <div class="metric blue">
+          <div class="metric-label">Bandwidth</div>
+          <div class="metric-val blue" id="m-bw">4.2</div>
+          <div class="metric-sub">Gbps attack traffic</div>
+          <div class="metric-glow">📡</div>
+        </div>
+      </div>
+
+      <div class="grid3">
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title"><span class="card-icon">📈</span> Live Traffic Monitor</div>
+            <div style="display:flex;align-items:center;gap:12px;font-size:11px">
+              <span style="display:flex;align-items:center;gap:5px;color:var(--blue2)"><span style="width:20px;height:2px;background:var(--blue);display:inline-block;border-radius:1px"></span>Normal</span>
+              <span style="display:flex;align-items:center;gap:5px;color:var(--red2)"><span style="width:20px;height:2px;background:var(--red);display:inline-block;border-radius:1px"></span>Attack</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="chart-wrap"><canvas id="trafficChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="card-title"><span class="card-icon">💥</span> Attack Types</div></div>
+          <div class="card-body">
+            <div class="atk-grid">
+              <div class="atk-card">
+                <div class="atk-name">SYN Flood</div>
+                <div class="atk-val" style="color:var(--red)" id="atk-syn">1,204</div>
+                <div class="atk-desc">packets/sec</div>
+              </div>
+              <div class="atk-card">
+                <div class="atk-name">HTTP Flood</div>
+                <div class="atk-val" style="color:var(--amber)" id="atk-http">873</div>
+                <div class="atk-desc">requests/sec</div>
+              </div>
+              <div class="atk-card">
+                <div class="atk-name">UDP Flood</div>
+                <div class="atk-val" style="color:var(--red)" id="atk-udp">2.1 Gbps</div>
+                <div class="atk-desc">bandwidth</div>
+              </div>
+              <div class="atk-card">
+                <div class="atk-name">Slowloris</div>
+                <div class="atk-val" style="color:var(--blue2)" id="atk-slow">38</div>
+                <div class="atk-desc">open conns</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head"><div class="card-title"><span class="card-icon">🌍</span> Top Attack Origins</div></div>
+          <div class="card-body">
+            <div class="geo-list">
+              <div class="geo-row"><span class="geo-flag">🇨🇳</span><span class="geo-name">China</span><div class="geo-bar-wrap"><div class="geo-fill" style="width:85%;background:var(--red)"></div></div><span class="geo-cnt">4,182</span></div>
+              <div class="geo-row"><span class="geo-flag">🇷🇺</span><span class="geo-name">Russia</span><div class="geo-bar-wrap"><div class="geo-fill" style="width:62%;background:var(--red)"></div></div><span class="geo-cnt">3,041</span></div>
+              <div class="geo-row"><span class="geo-flag">🇧🇷</span><span class="geo-name">Brazil</span><div class="geo-bar-wrap"><div class="geo-fill" style="width:44%;background:var(--amber)"></div></div><span class="geo-cnt">2,170</span></div>
+              <div class="geo-row"><span class="geo-flag">🇮🇳</span><span class="geo-name">India</span><div class="geo-bar-wrap"><div class="geo-fill" style="width:38%;background:var(--amber)"></div></div><span class="geo-cnt">1,874</span></div>
+              <div class="geo-row"><span class="geo-flag">🇺🇸</span><span class="geo-name">USA</span><div class="geo-bar-wrap"><div class="geo-fill" style="width:28%;background:var(--blue)"></div></div><span class="geo-cnt">1,389</span></div>
+              <div class="geo-row"><span class="geo-flag">🇩🇪</span><span class="geo-name">Germany</span><div class="geo-bar-wrap"><div class="geo-fill" style="width:18%;background:var(--blue)"></div></div><span class="geo-cnt">892</span></div>
+              <div class="geo-row"><span class="geo-flag">🇳🇱</span><span class="geo-name">Netherlands</span><div class="geo-bar-wrap"><div class="geo-fill" style="width:14%;background:var(--green)"></div></div><span class="geo-cnt">690</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><div class="card-title"><span class="card-icon">📋</span> Recent Events</div><button class="btn-export" onclick="navTo('eventlog',document.querySelector('.nav-item:nth-child(6))'))">View All</button></div>
+          <div style="overflow:auto;max-height:260px">
+            <table>
+              <thead><tr><th>Time</th><th>IP</th><th>Type</th><th>Severity</th><th>Action</th></tr></thead>
+              <tbody id="dash-log"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ IP INSPECTOR ══════════════════ -->
+    <div class="view" id="view-inspector">
+      <div class="section-title">🔍 IP Address Inspector</div>
+
+      <div class="card mb">
+        <div class="card-body">
+          <div class="ip-search-wrap">
+            <input class="ip-input" id="ipInput" type="text" placeholder="Enter IP address (e.g. 203.0.113.42, 8.8.8.8, 192.168.1.1 ...)" />
+            <button class="btn-scan" id="scanBtn" onclick="scanIP()">🔎 Scan IP</button>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <span style="font-size:11px;color:var(--text3);align-self:center">Quick test:</span>
+            <button class="btn-export" style="padding:4px 12px;font-size:11px" onclick="quickScan('203.0.113.42')">203.0.113.42 (Attacker)</button>
+            <button class="btn-export" style="padding:4px 12px;font-size:11px" onclick="quickScan('198.51.100.17')">198.51.100.17 (Botnet)</button>
+            <button class="btn-export" style="padding:4px 12px;font-size:11px" onclick="quickScan('8.8.8.8')">8.8.8.8 (Google)</button>
+            <button class="btn-export" style="padding:4px 12px;font-size:11px" onclick="quickScan('1.1.1.1')">1.1.1.1 (Cloudflare)</button>
+            <button class="btn-export" style="padding:4px 12px;font-size:11px" onclick="quickScan('185.220.101.5')">185.220.101.5 (Tor)</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="ipResultArea" style="display:none">
+        <div class="card ip-result-wrap">
+          <div class="ip-result-head">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div class="ip-addr" id="res-ip">-</div>
+              <span class="status-badge" id="res-badge">Unknown</span>
+            </div>
+            <div class="action-row">
+              <button class="action-btn block" onclick="blockFromInspector()">🚫 Block</button>
+              <button class="action-btn allow" onclick="allowFromInspector()">✅ Allow</button>
+              <button class="action-btn report" onclick="exportSingleIP()">📥 Export</button>
+            </div>
+          </div>
+
+          <div class="ip-grid">
+            <div class="ip-cell"><div class="ip-cell-label">Country</div><div class="ip-cell-val" id="res-country">-</div></div>
+            <div class="ip-cell"><div class="ip-cell-label">City</div><div class="ip-cell-val" id="res-city">-</div></div>
+            <div class="ip-cell"><div class="ip-cell-label">ASN</div><div class="ip-cell-val" id="res-asn">-</div></div>
+            <div class="ip-cell"><div class="ip-cell-label">ISP / Org</div><div class="ip-cell-val" id="res-isp">-</div></div>
+            <div class="ip-cell"><div class="ip-cell-label">IP Type</div><div class="ip-cell-val" id="res-type">-</div></div>
+            <div class="ip-cell"><div class="ip-cell-label">Hostname</div><div class="ip-cell-val" id="res-host">-</div></div>
+            <div class="ip-cell"><div class="ip-cell-label">Proxy / VPN</div><div class="ip-cell-val" id="res-proxy">-</div></div>
+            <div class="ip-cell"><div class="ip-cell-label">Tor Exit Node</div><div class="ip-cell-val" id="res-tor">-</div></div>
+            <div class="ip-cell"><div class="ip-cell-label">Total Hits</div><div class="ip-cell-val" id="res-hits">-</div></div>
+            <div class="ip-cell"><div class="ip-cell-label">First Seen</div><div class="ip-cell-val" id="res-first">-</div></div>
+            <div class="ip-cell"><div class="ip-cell-label">Last Seen</div><div class="ip-cell-val" id="res-last">-</div></div>
+            <div class="ip-cell"><div class="ip-cell-label">Reports</div><div class="ip-cell-val" id="res-reports">-</div></div>
+          </div>
+
+          <div class="threat-score-area">
+            <div class="score-header">
+              <div>
+                <div style="font-size:12px;color:var(--text3);margin-bottom:4px">Threat Score</div>
+                <div class="score-number" id="res-score">0</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Risk Level</div>
+                <div style="font-size:16px;font-weight:800" id="res-risk-level">-</div>
+              </div>
+            </div>
+            <div class="score-track"><div class="score-fill" id="res-score-bar" style="width:0%"></div></div>
+            <div class="score-breakdown">
+              <div class="score-factor">
+                <div class="score-factor-name">Volume</div>
+                <div class="score-factor-bar"><div class="score-factor-fill" id="sf-volume" style="height:100%"></div></div>
+                <div class="score-factor-val" id="sfv-volume">0</div>
+              </div>
+              <div class="score-factor">
+                <div class="score-factor-name">Pattern</div>
+                <div class="score-factor-bar"><div class="score-factor-fill" id="sf-pattern" style="height:100%"></div></div>
+                <div class="score-factor-val" id="sfv-pattern">0</div>
+              </div>
+              <div class="score-factor">
+                <div class="score-factor-name">Reputation</div>
+                <div class="score-factor-bar"><div class="score-factor-fill" id="sf-rep" style="height:100%"></div></div>
+                <div class="score-factor-val" id="sfv-rep">0</div>
+              </div>
+              <div class="score-factor">
+                <div class="score-factor-name">Geo Risk</div>
+                <div class="score-factor-bar"><div class="score-factor-fill" id="sf-geo" style="height:100%"></div></div>
+                <div class="score-factor-val" id="sfv-geo">0</div>
+              </div>
+              <div class="score-factor">
+                <div class="score-factor-name">Botnet</div>
+                <div class="score-factor-bar"><div class="score-factor-fill" id="sf-bot" style="height:100%"></div></div>
+                <div class="score-factor-val" id="sfv-bot">0</div>
+              </div>
+            </div>
+            <div class="flags-row" id="res-flags"></div>
+          </div>
+
+          <!-- Mini Traffic for this IP -->
+          <div style="padding:16px 18px;border-top:1px solid var(--border)">
+            <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:10px">Traffic History (this IP — last 30s)</div>
+            <div style="height:80px;position:relative"><canvas id="ipTrafficChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scan History -->
+      <div class="card" style="margin-top:14px">
+        <div class="card-head">
+          <div class="card-title"><span class="card-icon">🕐</span> Recent Scans</div>
+          <button class="btn-export" onclick="clearScanHistory()">Clear</button>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div id="scanHistoryArea" class="empty">No scans yet. Enter an IP above to begin.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ EVENT LOG ══════════════════ -->
+    <div class="view" id="view-eventlog">
+      <div class="section-title">📋 Detection Event Log</div>
+      <div class="card">
+        <div class="card-head">
+          <div class="filter-pills" style="margin:0">
+            <button class="fpill active" onclick="filterLog(this,'all')">All</button>
+            <button class="fpill" onclick="filterLog(this,'critical')">🔴 Critical</button>
+            <button class="fpill" onclick="filterLog(this,'high')">🟠 High</button>
+            <button class="fpill" onclick="filterLog(this,'medium')">🔵 Medium</button>
+            <button class="fpill" onclick="filterLog(this,'low')">🟢 Low</button>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-export" onclick="clearLog()">Clear Log</button>
+            <button class="btn-export" onclick="exportLog()">📥 Export CSV</button>
+          </div>
+        </div>
+        <div class="log-wrap">
+          <table>
+            <thead><tr><th>Timestamp</th><th>Source IP</th><th>Country</th><th>Attack Type</th><th>Severity</th><th>Req/s</th><th>Action</th><th>Details</th></tr></thead>
+            <tbody id="logTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ BLOCK LIST ══════════════════ -->
+    <div class="view" id="view-blocklist">
+      <div class="section-title">🚫 Block List</div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title"><span class="card-icon">🚫</span> Blocked IPs <span id="blocked-count-label" style="color:var(--red);font-family:var(--mono)">(47)</span></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-export" onclick="exportBlockList()">📥 Export</button>
+            <button class="btn-export" style="color:var(--red);border-color:rgba(255,71,87,.3)" onclick="clearAllBlocks()">Clear All</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="blocked-list" id="blockListEl"></div>
+          <div class="manual-block-row">
+            <input class="manual-input" id="manualBlockInput" placeholder="Enter IP or CIDR to block (e.g. 10.0.0.1 or 10.0.0.0/24)" />
+            <select id="manualBlockReason" class="settings-select" style="width:auto">
+              <option>Manual Block</option>
+              <option>SYN Flood</option>
+              <option>HTTP Flood</option>
+              <option>UDP Flood</option>
+              <option>Suspicious Activity</option>
+              <option>Botnet</option>
+            </select>
+            <button class="btn-block-manual" onclick="manualBlock()">+ Block IP</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ WHITE LIST ══════════════════ -->
+    <div class="view" id="view-whitelist">
+      <div class="section-title">✅ Whitelist</div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title"><span class="card-icon">✅</span> Trusted IPs / Ranges</div>
+        </div>
+        <div class="card-body">
+          <div class="list-area">
+            <div class="list-header">
+              <span style="font-size:12px;color:var(--text2)">Whitelisted entries — these IPs bypass all detection rules</span>
+            </div>
+            <div id="whiteListEl"></div>
+            <div class="list-add-row">
+              <input class="list-input" id="whiteInput" placeholder="Enter IP or CIDR range (e.g. 192.168.1.0/24)" />
+              <input class="list-input" id="whiteNote" placeholder="Note / Reason" style="flex:.8" />
+              <button class="btn-add" onclick="addWhitelist()">+ Add</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ RULES ══════════════════ -->
+    <div class="view" id="view-rules">
+      <div class="section-title">⚙️ Detection Rules</div>
+      <div class="rules-list" id="rulesArea"></div>
+    </div>
+
+    <!-- ══════════════════ STATISTICS ══════════════════ -->
+    <div class="view" id="view-statistics">
+      <div class="section-title">📈 Statistics & Analytics</div>
+      <div class="stat-grid">
+        <div class="card">
+          <div class="card-head"><div class="card-title"><span class="card-icon">📊</span> Attacks by Type (24h)</div></div>
+          <div class="card-body"><div class="stat-chart-wrap"><canvas id="statsTypeChart"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="card-title"><span class="card-icon">🌍</span> Attacks by Country</div></div>
+          <div class="card-body"><div class="stat-chart-wrap"><canvas id="statsGeoChart"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="card-title"><span class="card-icon">⏱</span> Attack Volume (24h)</div></div>
+          <div class="card-body"><div class="stat-chart-wrap"><canvas id="statsTimeChart"></canvas></div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><div class="card-title"><span class="card-icon">🎯</span> Actions Taken</div></div>
+          <div class="card-body"><div class="stat-chart-wrap"><canvas id="statsActionChart"></canvas></div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div class="card-title"><span class="card-icon">🏆</span> Top Attacking IPs (All Time)</div><button class="btn-export" onclick="exportReport()">📥 Export</button></div>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>#</th><th>IP Address</th><th>Country</th><th>Attack Type</th><th>Total Hits</th><th>First Seen</th><th>Status</th></tr></thead>
+            <tbody id="topIpsTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════ SETTINGS ══════════════════ -->
+    <div class="view" id="view-settings">
+      <div class="section-title">🔧 System Settings</div>
+
+      <div class="settings-section">
+        <div class="settings-label">General</div>
+        <div class="settings-row">
+          <div><div class="settings-name">Detection Mode</div><div class="settings-desc">Monitoring only / Active blocking</div></div>
+          <select class="settings-select" id="setting-mode" onchange="saveSetting('mode',this.value)">
+            <option value="active">Active (Block + Alert)</option>
+            <option value="monitor">Monitor Only</option>
+            <option value="challenge">Challenge Mode (CAPTCHA)</option>
+          </select>
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-name">Auto-Block Threshold</div><div class="settings-desc">Block IP when threat score exceeds this value</div></div>
+          <input class="settings-input" id="setting-threshold" type="number" value="75" min="0" max="100" onchange="saveSetting('threshold',this.value)">
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-name">Block Duration</div><div class="settings-desc">How long IPs stay blocked (minutes)</div></div>
+          <select class="settings-select" id="setting-duration" onchange="saveSetting('duration',this.value)">
+            <option value="15">15 minutes</option>
+            <option value="60" selected>1 hour</option>
+            <option value="1440">24 hours</option>
+            <option value="0">Permanent</option>
+           
+          </select>
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-name">Log Level</div><div class="settings-desc">Minimum severity to log</div></div>
+          <select class="settings-select" onchange="saveSetting('loglevel',this.value)">
+            <option>All Events</option>
+            <option>Medium+</option>
+            <option>High+</option>
+            <option>Critical Only</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">Alert Thresholds</div>
+        <div class="settings-row">
+          <div><div class="settings-name">Requests/sec Alert</div><div class="settings-desc">Trigger alert above this rate per IP</div></div>
+          <input class="settings-input" type="number" value="1000" onchange="saveSetting('rps-alert',this.value)">
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-name">SYN Flood Threshold</div><div class="settings-desc">Max SYN packets/sec before blocking</div></div>
+          <input class="settings-input" type="number" value="500" onchange="saveSetting('syn-thresh',this.value)">
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-name">HTTP Flood Threshold</div><div class="settings-desc">Max HTTP requests/sec per IP</div></div>
+          <input class="settings-input" type="number" value="200" onchange="saveSetting('http-thresh',this.value)">
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-name">UDP Bandwidth Limit</div><div class="settings-desc">Max Gbps UDP before mitigating</div></div>
+          <input class="settings-input" type="number" value="1" step="0.1" onchange="saveSetting('udp-bw',this.value)">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">Notifications</div>
+        <div class="settings-row">
+          <div><div class="settings-name">Browser Notifications</div><div class="settings-desc">Show popup alerts for critical attacks</div></div>
+          <button class="toggle on" id="notif-toggle" onclick="toggleSetting(this,'notifications')"></button>
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-name">Sound Alerts</div><div class="settings-desc">Beep on critical detection</div></div>
+          <button class="toggle off" id="sound-toggle" onclick="toggleSetting(this,'sound')"></button>
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-name">Auto-Dismiss Alerts</div><div class="settings-desc">Auto close alert banners after 10s</div></div>
+          <button class="toggle on" onclick="toggleSetting(this,'auto-dismiss')"></button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">Data</div>
+        <div class="settings-row">
+          <div><div class="settings-name">Export All Data</div><div class="settings-desc">Download full report as JSON</div></div>
+          <button class="btn-export" onclick="exportReport()">📥 Export JSON</button>
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-name">Clear All Logs</div><div class="settings-desc">Delete all event logs (cannot be undone)</div></div>
+          <button class="btn-export" style="color:var(--red);border-color:rgba(255,71,87,.3)" onclick="clearLog();notify('All logs cleared','success')">🗑 Clear Logs</button>
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-name">Reset All Blocks</div><div class="settings-desc">Unblock all currently blocked IPs</div></div>
+          <button class="btn-export" style="color:var(--amber);border-color:rgba(255,165,2,.3)" onclick="clearAllBlocks()">↺ Reset Blocks</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end main -->
+</div><!-- end shell -->
+
+<script>
+/* ══════════════════════════════════════════
+   DDOS GUARD — FULL WORKING JAVASCRIPT
+══════════════════════════════════════════ */
+
+// ── STATE ──
+let logEntries = [];
+let blockList = [];
+let whiteList = [
+  {ip:'127.0.0.1', note:'Localhost', time: ts()},
+  {ip:'10.0.0.0/8', note:'Internal Network', time: ts()},
+  {ip:'192.168.0.0/16', note:'LAN Range', time: ts()},
+];
+let scanHistory = [];
+let currentScannedIP = null;
+let liveChartData = {normal:[],attack:[],labels:[]};
+let trafficChart, ipTrafficChart, statsTypeChart, statsGeoChart, statsTimeChart, statsActionChart;
+let blockedCount = 47;
+let logFilter = 'all';
+let settings = {mode:'active',threshold:75,duration:60};
+let alertDismissTimer = null;
+
+const RULES = [
+  {id:'syn',icon:'🌊',name:'SYN Flood Detection',desc:'Detect & block TCP SYN packet floods',on:true,threshold:500,unit:'pkt/s'},
+  {id:'http',icon:'🌐',name:'HTTP Flood Protection',desc:'Rate-limit excessive HTTP requests per IP',on:true,threshold:200,unit:'req/s'},
+  {id:'udp',icon:'📡',name:'UDP Flood Detection',desc:'Block high-bandwidth UDP amplification attacks',on:true,threshold:1,unit:'Gbps'},
+  {id:'slowloris',icon:'🐌',name:'Slowloris Defense',desc:'Close slow incomplete HTTP connections',on:true,threshold:50,unit:'conn'},
+  {id:'icmp',icon:'📶',name:'ICMP Flood Guard',desc:'Rate-limit ICMP ping floods',on:true,threshold:100,unit:'req/s'},
+  {id:'dns',icon:'🔗',name:'DNS Amplification',desc:'Detect DNS reflection attack patterns',on:true,threshold:500,unit:'pkt/s'},
+  {id:'geo',icon:'🗺',name:'Geo-Blocking',desc:'Block entire high-risk country ranges',on:false,threshold:0,unit:''},
+  {id:'bot',icon:'🤖',name:'Bot Fingerprinting',desc:'Detect & block known bot user-agents',on:true,threshold:0,unit:''},
+  {id:'rate',icon:'⏱',name:'Global Rate Limiting',desc:'Cap max requests/sec across all IPs',on:true,threshold:10000,unit:'req/s'},
+  {id:'captcha',icon:'🧩',name:'CAPTCHA Challenge',desc:'Challenge suspicious IPs with CAPTCHA',on:false,threshold:50,unit:'score'},
+];
+
+// ── IP DATABASE (extended) ──
+const IP_DB = {
+  '203.0.113.42':  {country:'China',flag:'🇨🇳',city:'Beijing',asn:'AS4134',isp:'ChinaNet',type:'Datacenter',host:'static.chinanet.com',proxy:true,tor:false,hits:'14,302',first:'2025-01-14',last:'today',reports:87,score:92,status:'blocked',volume:95,pattern:88,rep:90,geo:85,botnet:95,flags:[{t:'SYN Flood',c:'red'},{t:'Botnet',c:'red'},{t:'Proxy',c:'amber'}]},
+  '198.51.100.17': {country:'Russia',flag:'🇷🇺',city:'Moscow',asn:'AS60388',isp:'Selectel LLC',type:'VPS/Cloud',host:'vps.selectel.ru',proxy:true,tor:false,hits:'8,740',first:'2025-03-02',last:'today',reports:52,score:87,status:'blocked',volume:82,pattern:91,rep:85,geo:80,botnet:88,flags:[{t:'HTTP Flood',c:'red'},{t:'Proxy',c:'amber'},{t:'Scanner',c:'blue'}]},
+  '185.220.101.5': {country:'Germany',flag:'🇩🇪',city:'Frankfurt',asn:'AS205100',isp:'Tor Exit Node',type:'Tor Exit',host:'tor-exit.example.de',proxy:false,tor:true,hits:'5,100',first:'2024-11-20',last:'today',reports:201,score:96,status:'blocked',volume:70,pattern:95,rep:98,geo:60,botnet:80,flags:[{t:'Tor Exit',c:'red'},{t:'High Risk',c:'red'},{t:'Anonymous',c:'amber'}]},
+  '91.108.56.83':  {country:'Netherlands',flag:'🇳🇱',city:'Amsterdam',asn:'AS9009',isp:'M247 Ltd',type:'VPN/Proxy',host:'proxy.m247.com',proxy:true,tor:false,hits:'380',first:'2025-04-10',last:'1h ago',reports:12,score:64,status:'suspicious',volume:45,pattern:70,rep:60,geo:50,botnet:30,flags:[{t:'Slowloris',c:'amber'},{t:'VPN',c:'blue'}]},
+  '5.188.206.14':  {country:'Russia',flag:'🇷🇺',city:'Saint Petersburg',asn:'AS47764',isp:'PIN-AS',type:'Datacenter',host:'',proxy:false,tor:false,hits:'22,000',first:'2025-02-01',last:'today',reports:130,score:98,status:'blocked',volume:99,pattern:98,rep:97,geo:80,botnet:99,flags:[{t:'ICMP Flood',c:'red'},{t:'Botnet C2',c:'red'},{t:'Known Bad',c:'red'}]},
+  '45.227.253.42': {country:'Brazil',flag:'🇧🇷',city:'São Paulo',asn:'AS263297',isp:'IPNET',type:'Residential',host:'',proxy:false,tor:false,hits:'910',first:'2025-05-01',last:'2h ago',reports:8,score:55,status:'suspicious',volume:60,pattern:50,rep:55,geo:55,botnet:45,flags:[{t:'DNS Amplification',c:'amber'}]},
+  '8.8.8.8':       {country:'USA',flag:'🇺🇸',city:'Mountain View, CA',asn:'AS15169',isp:'Google LLC',type:'DNS Resolver',host:'dns.google',proxy:false,tor:false,hits:'12',first:'2020-01-01',last:'3d ago',reports:0,score:2,status:'clean',volume:1,pattern:1,rep:2,geo:5,botnet:0,flags:[]},
+  '1.1.1.1':       {country:'Australia',flag:'🇦🇺',city:'Sydney',asn:'AS13335',isp:'Cloudflare Inc.',type:'DNS Resolver',host:'one.one.one.one',proxy:false,tor:false,hits:'5',first:'2018-04-01',last:'5d ago',reports:0,score:1,status:'clean',volume:0,pattern:0,rep:1,geo:3,botnet:0,flags:[]},
+};
+
+// ── INITIAL LOG ENTRIES ──
+const SEED_LOGS = [
+  {time:'10:47:32',ip:'203.0.113.42',country:'🇨🇳 CN',type:'SYN Flood',sev:'critical',rps:'14,302',action:'Blocked',detail:'14k SYN/s sustained'},
+  {time:'10:46:58',ip:'198.51.100.17',country:'🇷🇺 RU',type:'HTTP Flood',sev:'high',rps:'8,740',action:'Blocked',detail:'GET flood /api/'},
+  {time:'10:46:20',ip:'185.220.101.5',country:'🇩🇪 DE',type:'UDP Amplification',sev:'high',rps:'5,110',action:'Rate Limited',detail:'DNS amp factor 50x'},
+  {time:'10:45:44',ip:'91.108.56.83',country:'🇳🇱 NL',type:'Slowloris',sev:'medium',rps:'380',action:'Challenged',detail:'38 partial conns'},
+  {time:'10:45:02',ip:'5.188.206.14',country:'🇷🇺 RU',type:'ICMP Flood',sev:'critical',rps:'22,000',action:'Blocked',detail:'Ping of death variant'},
+  {time:'10:44:30',ip:'45.227.253.42',country:'🇧🇷 BR',type:'DNS Amplification',sev:'medium',rps:'910',action:'Rate Limited',detail:'UDP port 53 abuse'},
+  {time:'10:43:55',ip:'178.62.192.10',country:'🇬🇧 GB',type:'Port Scan',sev:'low',rps:'120',action:'Logged',detail:'TCP port scan 1-1024'},
+];
+
+// ── TOP ATTACKING IPs ──
+const TOP_IPS = [
+  {rank:1,ip:'5.188.206.14',country:'🇷🇺 RU',type:'ICMP Flood',hits:'22,000',first:'2025-02-01',status:'blocked'},
+  {rank:2,ip:'203.0.113.42',country:'🇨🇳 CN',type:'SYN Flood',hits:'14,302',first:'2025-01-14',status:'blocked'},
+  {rank:3,ip:'198.51.100.17',country:'🇷🇺 RU',type:'HTTP Flood',hits:'8,740',first:'2025-03-02',status:'blocked'},
+  {rank:4,ip:'185.220.101.5',country:'🇩🇪 DE',type:'Tor Exit',hits:'5,100',first:'2024-11-20',status:'blocked'},
+  {rank:5,ip:'45.227.253.42',country:'🇧🇷 BR',type:'DNS Amplification',hits:'910',first:'2025-05-01',status:'suspicious'},
+  {rank:6,ip:'91.108.56.83',country:'🇳🇱 NL',type:'Slowloris',hits:'380',first:'2025-04-10',status:'suspicious'},
+  {rank:7,ip:'178.62.192.10',country:'🇬🇧 GB',type:'Port Scan',hits:'120',first:'2025-05-08',status:'logged'},
+];
+
+// ── SEED BLOCK LIST ──
+const SEED_BLOCKS = [
+  {ip:'203.0.113.42',reason:'SYN Flood',time:'10:47:32'},
+  {ip:'198.51.100.17',reason:'HTTP Flood',time:'10:46:58'},
+  {ip:'5.188.206.14',reason:'ICMP Flood',time:'10:45:02'},
+  {ip:'185.220.101.5',reason:'UDP Amplification',time:'10:46:20'},
+  {ip:'91.108.56.83',reason:'Slowloris',time:'10:45:44'},
+  {ip:'45.227.253.42',reason:'DNS Amplification',time:'10:44:30'},
+];
+
+/* ════════════ INIT ════════════ */
+function init() {
+  startClock();
+  logEntries = [...SEED_LOGS];
+  blockList = [...SEED_BLOCKS];
+  renderLogTable();
+  renderBlockList();
+  renderWhiteList();
+  renderRules();
+  renderTopIPs();
+  initTrafficChart();
+  initStatsCharts();
+  startLiveUpdates();
+}
+
+/* ════════════ CLOCK ════════════ */
+function ts() { return new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+function startClock() { setInterval(()=>document.getElementById('clockEl').textContent=ts(),1000); document.getElementById('clockEl').textContent=ts(); }
+
+/* ════════════ NAVIGATION ════════════ */
+function navTo(view, el) {
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('view-'+view).classList.add('active');
+  if(el) el.classList.add('active');
+  else document.querySelectorAll('.nav-item').forEach(n=>{ if(n.textContent.toLowerCase().includes(view.replace('-',' '))) n.classList.add('active'); });
+  if(view==='statistics') refreshStatsCharts();
+}
+
+/* ════════════ IP SCAN ════════════ */
+function quickScan(ip) {
+  document.getElementById('ipInput').value = ip;
+  navTo('inspector', document.querySelector('.nav-item:nth-child(3)'));
+  scanIP();
+}
+
+function scanIP() {
+  const ip = document.getElementById('ipInput').value.trim();
+  if(!ip){ notify('Please enter an IP address','error'); return; }
+  if(!isValidIP(ip)){ notify('Invalid IP address format','error'); return; }
+
+  const btn = document.getElementById('scanBtn');
+  btn.classList.add('loading');
+  btn.textContent = '⏳ Scanning...';
+
+  setTimeout(()=>{
+    btn.classList.remove('loading');
+    btn.textContent = '🔎 Scan IP';
+    displayIPResult(ip);
+    addScanHistory(ip);
+  }, 800 + Math.random()*400);
+}
+
+function isValidIP(ip) {
+  const ipv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
+  const ipv6 = /^[a-fA-F0-9:]+$/;
+  return ipv4.test(ip) || ipv6.test(ip);
+}
+
+function displayIPResult(ip) {
+  currentScannedIP = ip;
+  const data = IP_DB[ip] || generateRandomIPData(ip);
+
+  // Check whitelist
+  const isWhite = whiteList.some(w => w.ip === ip || ip.startsWith(w.ip.split('/')[0].slice(0,-1)));
+  if(isWhite) { data.status='clean'; data.score=0; data.flags=[{t:'Whitelisted',c:'green'}]; }
+
+  document.getElementById('res-ip').textContent = ip;
+  document.getElementById('res-country').textContent = data.flag + ' ' + data.country;
+  document.getElementById('res-city').textContent = data.city;
+  document.getElementById('res-asn').textContent = data.asn;
+  document.getElementById('res-isp').textContent = data.isp;
+  document.getElementById('res-type').textContent = data.type;
+  document.getElementById('res-host').textContent = data.host || 'N/A';
+  document.getElementById('res-proxy').textContent = data.proxy ? '⚠️ Yes' : '✅ No';
+  document.getElementById('res-tor').textContent = data.tor ? '⚠️ Yes' : '✅ No';
+  document.getElementById('res-hits').textContent = data.hits;
+  document.getElementById('res-first').textContent = data.first;
+  document.getElementById('res-last').textContent = data.last;
+  document.getElementById('res-reports').textContent = data.reports + ' reports';
+
+  const score = data.score;
+  const scoreColor = score >= 75 ? 'var(--red)' : score >= 50 ? 'var(--amber)' : score >= 25 ? 'var(--blue2)' : 'var(--green)';
+  const riskLabel = score >= 75 ? '🔴 CRITICAL' : score >= 50 ? '🟠 HIGH' : score >= 25 ? '🔵 MEDIUM' : '🟢 LOW';
+  document.getElementById('res-score').textContent = score;
+  document.getElementById('res-score').style.color = scoreColor;
+  document.getElementById('res-risk-level').textContent = riskLabel;
+  document.getElementById('res-risk-level').style.color = scoreColor;
+  document.getElementById('res-score-bar').style.width = score + '%';
+  document.getElementById('res-score-bar').style.background = scoreColor;
+
+  function setFactor(id, val, color) {
+    document.getElementById('sf-'+id).style.width = val + '%';
+    document.getElementById('sf-'+id).style.background = color;
+    document.getElementById('sfv-'+id).textContent = val;
+    document.getElementById('sfv-'+id).style.color = color;
+  }
+  setFactor('volume', data.volume, scoreColor);
+  setFactor('pattern', data.pattern, scoreColor);
+  setFactor('rep', data.rep, scoreColor);
+  setFactor('geo', data.geo, scoreColor);
+  setFactor('bot', data.botnet, scoreColor);
+
+  const badge = document.getElementById('res-badge');
+  badge.className = 'status-badge ' + data.status;
+  badge.textContent = data.status === 'blocked' ? '🚫 Blocked' : data.status === 'suspicious' ? '⚠️ Suspicious' : '✅ Clean';
+
+  const flagsEl = document.getElementById('res-flags');
+  flagsEl.innerHTML = data.flags.map(f=>`<span class="tag ${f.c}">${f.t}</span>`).join('');
+  if(data.proxy) flagsEl.innerHTML += '<span class="tag amber">Proxy</span>';
+  if(data.tor)   flagsEl.innerHTML += '<span class="tag red">Tor</span>';
+
+  document.getElementById('ipResultArea').style.display = 'block';
+
+  // Mini IP traffic chart
+  drawIPTrafficChart(data.status, data.score);
+
+  // Auto-block if above threshold & mode active
+  if(settings.mode === 'active' && score >= settings.threshold && data.status !== 'clean') {
+    if(!blockList.find(b=>b.ip===ip)) {
+      blockList.push({ip, reason:'Auto-block (score:'+score+')', time:ts()});
+      blockedCount++;
+      updateBlockedCount();
+      renderBlockList();
+      notify('Auto-blocked '+ip+' (threat score: '+score+')','error');
+    }
+  }
+}
+
+function generateRandomIPData(ip) {
+  const countries = [
+    {c:'China',flag:'🇨🇳'},{c:'Russia',flag:'🇷🇺'},{c:'USA',flag:'🇺🇸'},{c:'Brazil',flag:'🇧🇷'},
+    {c:'India',flag:'🇮🇳'},{c:'Germany',flag:'🇩🇪'},{c:'France',flag:'🇫🇷'},{c:'UK',flag:'🇬🇧'}
+  ];
+  const country = countries[Math.floor(Math.random()*countries.length)];
+  const score = Math.floor(Math.random()*60)+10;
+  const status = score >= 75 ? 'blocked' : score >= 40 ? 'suspicious' : 'clean';
+  const flags = score > 50 ? [{t:'Suspicious Traffic',c:'amber'}] : [];
+  return {
+    country:country.c, flag:country.flag, city:'Unknown', asn:'AS'+Math.floor(Math.random()*60000),
+    isp:'Unknown ISP', type:'Residential', host:'', proxy:Math.random()>.7, tor:Math.random()>.9,
+    hits:Math.floor(Math.random()*2000).toLocaleString(), first:'2025-0'+Math.ceil(Math.random()*5)+'-01',
+    last:Math.floor(Math.random()*24)+'h ago', reports:Math.floor(Math.random()*20),
+    score, status, volume:score, pattern:Math.floor(score*.9), rep:Math.floor(score*.95),
+    geo:Math.floor(score*.7), botnet:Math.floor(score*.8), flags
+  };
+}
+
+function drawIPTrafficChart(status, score) {
+  const canvas = document.getElementById('ipTrafficChart');
+  if(ipTrafficChart) { ipTrafficChart.destroy(); ipTrafficChart = null; }
+  const labels = Array.from({length:30},(_,i)=>i);
+  const data = labels.map(()=> status==='blocked' ? Math.floor(Math.random()*score*150+200) : Math.floor(Math.random()*100+50));
+  const color = score>=75 ? '#ff4757' : score>=40 ? '#ffa502' : '#2ed573';
+  ipTrafficChart = new Chart(canvas, {
+    type:'line',
+    data:{ labels, datasets:[{data, borderColor:color, backgroundColor:color+'22', borderWidth:1.5, pointRadius:0, tension:.4, fill:true}]},
+    options:{ responsive:true, maintainAspectRatio:false, animation:false, plugins:{legend:{display:false}},
+      scales:{ x:{display:false}, y:{display:false} }}
+  });
+}
+
+function addScanHistory(ip) {
+  const data = IP_DB[ip] || {status:'unknown', score: '?', country:'Unknown', flag:'🌍'};
+  scanHistory.unshift({ip, time:ts(), status:data.status||'unknown', score:data.score||'?', country:data.flag||'🌍'});
+  if(scanHistory.length > 20) scanHistory.pop();
+  renderScanHistory();
+}
+
+function renderScanHistory() {
+  const el = document.getElementById('scanHistoryArea');
+  if(!scanHistory.length){ el.innerHTML='<div class="empty">No scans yet.</div>'; return; }
+  el.innerHTML = '<table><thead><tr><th>Time</th><th>IP</th><th>Country</th><th>Status</th><th>Score</th><th></th></tr></thead><tbody>' +
+    scanHistory.map(s=>`<tr>
+      <td>${s.time}</td>
+      <td><span style="font-family:var(--mono);color:var(--text)">${s.ip}</span></td>
+      <td>${s.country}</td>
+      <td><span class="status-badge ${s.status}" style="font-size:10px;padding:2px 8px">${s.status}</span></td>
+      <td style="color:${s.score>=75?'var(--red)':s.score>=40?'var(--amber)':'var(--green)'};font-weight:700;font-family:var(--mono)">${s.score}</td>
+      <td><button class="action-btn report" style="padding:3px 10px;font-size:11px" onclick="quickScan('${s.ip}')">Re-scan</button></td>
+    </tr>`).join('') + '</tbody></table>';
+}
+
+function clearScanHistory() { scanHistory=[]; renderScanHistory(); notify('Scan history cleared','success'); }
+
+function blockFromInspector() {
+  const ip = document.getElementById('res-ip').textContent;
+  if(!ip||ip==='-') return;
+  if(!blockList.find(b=>b.ip===ip)) {
+    blockList.push({ip, reason:'Manual Block via Inspector', time:ts()});
+    blockedCount++; updateBlockedCount(); renderBlockList();
+    notify(ip+' has been blocked','error');
+  } else notify(ip+' is already blocked','info');
+  document.getElementById('res-badge').className='status-badge blocked';
+  document.getElementById('res-badge').textContent='🚫 Blocked';
+}
+
+function allowFromInspector() {
+  const ip = document.getElementById('res-ip').textContent;
+  if(!ip||ip==='-') return;
+  blockList = blockList.filter(b=>b.ip!==ip);
+  if(!whiteList.find(w=>w.ip===ip)) { whiteList.push({ip,note:'Allowed via Inspector',time:ts()}); renderWhiteList(); }
+  blockedCount = Math.max(0,blockedCount-1); updateBlockedCount(); renderBlockList();
+  notify(ip+' allowed and whitelisted','success');
+  document.getElementById('res-badge').className='status-badge clean';
+  document.getElementById('res-badge').textContent='✅ Clean';
+}
+
+function exportSingleIP() {
+  const ip = document.getElementById('res-ip').textContent;
+  const data = IP_DB[ip] || {score:'?',status:'unknown'};
+  const report = {ip, scannedAt:new Date().toISOString(), threatScore:data.score, status:data.status, scanHistory};
+  downloadJSON(report, 'ip-report-'+ip.replace(/\./g,'-')+'.json');
+  notify('IP report exported','success');
+}
+
+/* ════════════ LOG TABLE ════════════ */
+function renderLogTable(target) {
+  const tbody = document.getElementById('logTbody');
+  if(!tbody) return;
+  const filtered = logFilter==='all' ? logEntries : logEntries.filter(e=>e.sev===logFilter);
+  tbody.innerHTML = filtered.length ? filtered.map(e=>`<tr>
+    <td>${e.time}</td>
+    <td style="color:var(--cyan)">${e.ip}</td>
+    <td>${e.country||'🌍'}</td>
+    <td>${e.type}</td>
+    <td><span class="sev ${e.sev}">${capitalize(e.sev)}</span></td>
+    <td>${e.rps}</td>
+    <td><span class="act ${e.action.toLowerCase().replace(' ','')||'logged'}">${e.action}</span></td>
+    <td style="color:var(--text3)">${e.detail||'-'}</td>
+  </tr>`).join('') : '<tr><td colspan="8" class="empty">No events match filter.</td></tr>';
+
+  // Also update dashboard mini-log
+  const dash = document.getElementById('dash-log');
+  if(dash) {
+    dash.innerHTML = logEntries.slice(0,8).map(e=>`<tr>
+      <td>${e.time}</td>
+      <td style="color:var(--cyan)">${e.ip}</td>
+      <td>${e.type}</td>
+      <td><span class="sev ${e.sev}">${capitalize(e.sev)}</span></td>
+      <td><span class="act ${e.action.toLowerCase().replace(' ','')||'logged'}">${e.action}</span></td>
+    </tr>`).join('');
+  }
+  document.getElementById('log-nav-badge').textContent = logEntries.length;
+}
+
+function filterLog(btn, filter) {
+  logFilter = filter;
+  document.querySelectorAll('.fpill').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderLogTable();
+}
+
+function clearLog() { logEntries=[]; renderLogTable(); notify('Event log cleared','success'); }
+
+function exportLog() {
+  const csv = 'Time,IP,Country,Attack Type,Severity,Req/s,Action,Detail\n' +
+    logEntries.map(e=>`${e.time},${e.ip},${e.country||''},${e.type},${e.sev},${e.rps},${e.action},"${e.detail||''}"`).join('\n');
+  download(csv,'event-log.csv','text/csv');
+  notify('Event log exported as CSV','success');
+}
+
+/* ════════════ BLOCK LIST ════════════ */
+function renderBlockList() {
+  const el = document.getElementById('blockListEl');
+  if(!el) return;
+  el.innerHTML = blockList.length ? blockList.map((b,i)=>`
+    <div class="blocked-row pop">
+      <span class="blocked-ip">${b.ip}</span>
+      <span class="blocked-reason">${b.reason}</span>
+      <span class="blocked-time">${b.time}</span>
+      <button class="unblock-btn" onclick="unblockIP(${i})">Unblock</button>
+    </div>`).join('') : '<div class="empty">No IPs currently blocked.</div>';
+  updateBlockedCount();
+}
+
+function unblockIP(idx) {
+  const ip = blockList[idx].ip;
+  blockList.splice(idx,1);
+  blockedCount = Math.max(0,blockedCount-1);
+  updateBlockedCount();
+  renderBlockList();
+  notify(ip+' has been unblocked','success');
+}
+
+function manualBlock() {
+  const ip = document.getElementById('manualBlockInput').value.trim();
+  const reason = document.getElementById('manualBlockReason').value;
+  if(!ip){ notify('Enter an IP address','error'); return; }
+  if(blockList.find(b=>b.ip===ip)){ notify(ip+' is already blocked','info'); return; }
+  if(whiteList.find(w=>w.ip===ip)){ notify(ip+' is whitelisted — cannot block','info'); return; }
+  blockList.unshift({ip, reason, time:ts()});
+  blockedCount++;
+  updateBlockedCount();
+  renderBlockList();
+  document.getElementById('manualBlockInput').value='';
+  notify(ip+' blocked: '+reason,'error');
+  // Log it
+  addLogEntry({ip, country:'🌍', type:'Manual Block', sev:'high', rps:'—', action:'Blocked', detail:reason});
+}
+
+function clearAllBlocks() {
+  if(!confirm('Unblock all '+blockList.length+' IPs? This cannot be undone.')) return;
+  blockList=[]; blockedCount=0; updateBlockedCount(); renderBlockList();
+  notify('All blocks cleared','success');
+}
+
+function exportBlockList() {
+  const csv = 'IP,Reason,Blocked At\n' + blockList.map(b=>`${b.ip},"${b.reason}",${b.time}`).join('\n');
+  download(csv,'blocklist.csv','text/csv');
+  notify('Block list exported','success');
+}
+
+function updateBlockedCount() {
+  document.getElementById('m-blocked').textContent = blockedCount;
+  document.getElementById('blocked-nav-badge').textContent = blockedCount;
+  document.getElementById('blocked-count-label').textContent = '('+blockedCount+')';
+}
+
+/* ════════════ WHITE LIST ════════════ */
+function renderWhiteList() {
+  const el = document.getElementById('whiteListEl');
+  if(!el) return;
+  el.innerHTML = whiteList.length ? whiteList.map((w,i)=>`
+    <div class="list-item">
+      <span class="list-ip">${w.ip}</span>
+      <span style="font-size:11px;color:var(--text3);flex:1;margin-left:16px">${w.note}</span>
+      <span style="font-size:10px;color:var(--text3);margin-right:12px;font-family:var(--mono)">${w.time}</span>
+      <button class="del-btn" onclick="removeWhitelist(${i})">Remove</button>
+    </div>`).join('') : '<div class="empty">No whitelisted entries.</div>';
+  document.getElementById('white-nav-badge').textContent = whiteList.length;
+}
+
+function addWhitelist() {
+  const ip = document.getElementById('whiteInput').value.trim();
+  const note = document.getElementById('whiteNote').value.trim() || 'No note';
+  if(!ip){ notify('Enter an IP or CIDR','error'); return; }
+  if(whiteList.find(w=>w.ip===ip)){ notify('Already whitelisted','info'); return; }
+  whiteList.push({ip,note,time:ts()});
+  document.getElementById('whiteInput').value='';
+  document.getElementById('whiteNote').value='';
+  renderWhiteList();
+  notify(ip+' added to whitelist','success');
+}
+
+function removeWhitelist(idx) {
+  const ip = whiteList[idx].ip;
+  whiteList.splice(idx,1);
+  renderWhiteList();
+  notify(ip+' removed from whitelist','info');
+}
+
+/* ════════════ RULES ════════════ */
+function renderRules() {
+  const el = document.getElementById('rulesArea');
+  if(!el) return;
+  el.innerHTML = RULES.map((r,i)=>`
+    <div class="card mb" style="margin-bottom:8px">
+      <div class="rule-row" style="border:none;background:transparent;padding:16px 18px">
+        <div class="rule-info">
+          <span class="rule-icon">${r.icon}</span>
+          <div>
+            <div class="rule-name">${r.name}</div>
+            <div class="rule-desc">${r.desc}</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px">
+          ${r.threshold>0 ? `<div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3)">Threshold: <input class="threshold-input" type="${r.id==='udp'?'number':'number'}" value="${r.threshold}" step="${r.id==='udp'?'0.1':'1'}" onchange="updateRuleThreshold(${i},this.value)"> <span>${r.unit}</span></div>` : ''}
+          <div class="toggle-wrap">
+            <span class="toggle-label" id="rule-label-${i}" style="color:${r.on?'var(--green)':'var(--text3)'}">${r.on?'ON':'OFF'}</span>
+            <button class="toggle ${r.on?'on':'off'}" id="rule-toggle-${i}" onclick="toggleRule(${i})" aria-label="Toggle ${r.name}"></button>
+          </div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function toggleRule(i) {
+  RULES[i].on = !RULES[i].on;
+  const btn = document.getElementById('rule-toggle-'+i);
+  const lbl = document.getElementById('rule-label-'+i);
+  btn.className = 'toggle '+(RULES[i].on?'on':'off');
+  lbl.textContent = RULES[i].on?'ON':'OFF';
+  lbl.style.color = RULES[i].on?'var(--green)':'var(--text3)';
+  notify(RULES[i].name+' '+(RULES[i].on?'enabled':'disabled'), RULES[i].on?'success':'info');
+}
+
+function updateRuleThreshold(i, val) { RULES[i].threshold = parseFloat(val); }
+
+/* ════════════ SETTINGS ════════════ */
+function saveSetting(key, val) {
+  settings[key] = val;
+  if(key==='threshold') settings.threshold = parseInt(val);
+  notify('Setting saved: '+key+' = '+val,'success');
+}
+
+function toggleSetting(btn, key) {
+  const isOn = btn.classList.contains('on');
+  btn.className = 'toggle '+(isOn?'off':'on');
+  notify(key+' '+(isOn?'disabled':'enabled'),isOn?'info':'success');
+}
+
+/* ════════════ CHARTS ════════════ */
+function initTrafficChart() {
+  const canvas = document.getElementById('trafficChart');
+  if(!canvas) return;
+  for(let i=29;i>=0;i--) {
+    const t = new Date(Date.now()-i*2000);
+    liveChartData.labels.push(t.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+    liveChartData.normal.push(Math.round(1000+Math.random()*600));
+    liveChartData.attack.push(i<12 ? Math.round(400+Math.random()*900) : 0);
+  }
+  trafficChart = new Chart(canvas, {
+    type:'line',
+    data:{ labels:liveChartData.labels,
+      datasets:[
+        {label:'Normal',data:liveChartData.normal,borderColor:'#1e90ff',backgroundColor:'rgba(30,144,255,0.1)',borderWidth:1.5,pointRadius:0,tension:.4,fill:true},
+        {label:'Attack',data:liveChartData.attack,borderColor:'#ff4757',backgroundColor:'rgba(255,71,87,0.12)',borderWidth:1.5,pointRadius:0,tension:.4,fill:true}
+      ]},
+    options:{ responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:false}},
+      scales:{ x:{display:false}, y:{grid:{color:'rgba(255,255,255,0.04)',drawBorder:false},ticks:{color:'#555a6a',font:{size:10},maxTicksLimit:4,callback:v=>v>999?(v/1000).toFixed(1)+'k':v}}}
+    }
+  });
+}
+
+function updateTrafficChart() {
+  if(!trafficChart) return;
+  const t = ts();
+  liveChartData.labels.push(t); liveChartData.labels.shift();
+  const normal = Math.round(800+Math.random()*700+Math.sin(Date.now()/5000)*250);
+  const attack = Math.random()>.4 ? Math.round(300+Math.random()*1200) : 0;
+  liveChartData.normal.push(normal); liveChartData.normal.shift();
+  liveChartData.attack.push(attack); liveChartData.attack.shift();
+  trafficChart.data.labels = liveChartData.labels;
+  trafficChart.data.datasets[0].data = liveChartData.normal;
+  trafficChart.data.datasets[1].data = liveChartData.attack;
+  trafficChart.update('none');
+}
+
+function initStatsCharts() {
+  // Type chart
+  const c1 = document.getElementById('statsTypeChart');
+  if(c1) {
+    statsTypeChart = new Chart(c1, {
+      type:'doughnut',
+      data:{ labels:['SYN Flood','HTTP Flood','UDP Flood','ICMP Flood','Slowloris','DNS Amp'],
+        datasets:[{data:[35,22,18,12,7,6],backgroundColor:['#ff4757','#ffa502','#ff6b81','#2ed573','#1e90ff','#a855f7'],borderWidth:0}]},
+      options:{ responsive:true,maintainAspectRatio:false, plugins:{legend:{position:'right',labels:{color:'#8b90a0',font:{size:11},boxWidth:10}}}}
+    });
+  }
+  // Geo chart
+  const c2 = document.getElementById('statsGeoChart');
+  if(c2) {
+    statsGeoChart = new Chart(c2, {
+      type:'bar',
+      data:{ labels:['China','Russia','Brazil','India','USA','Germany','Others'],
+        datasets:[{data:[4182,3041,2170,1874,1389,892,690],backgroundColor:['#ff4757','#ff4757','#ffa502','#ffa502','#1e90ff','#1e90ff','#555a6a'],borderRadius:4,borderSkipped:false}]},
+      options:{ responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{ x:{ticks:{color:'#8b90a0',font:{size:10}}},y:{ticks:{color:'#8b90a0',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}} }}
+    });
+  }
+  // Time chart (24h)
+  const c3 = document.getElementById('statsTimeChart');
+  if(c3) {
+    const hours = Array.from({length:24},(_,i)=>i+':00');
+    const volumes = [120,80,50,40,35,60,180,420,680,850,920,780,710,850,930,1020,1100,1200,1400,1600,2100,2800,3200,2841];
+    statsTimeChart = new Chart(c3, {
+      type:'line',
+      data:{ labels:hours, datasets:[{data:volumes,borderColor:'#00d4ff',backgroundColor:'rgba(0,212,255,0.08)',borderWidth:1.5,pointRadius:0,tension:.4,fill:true}]},
+      options:{ responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{ x:{ticks:{color:'#8b90a0',font:{size:9},maxTicksLimit:8}},y:{ticks:{color:'#8b90a0',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}} }}
+    });
+  }
+  // Actions chart
+  const c4 = document.getElementById('statsActionChart');
+  if(c4) {
+    statsActionChart = new Chart(c4, {
+      type:'bar',
+      data:{ labels:['Blocked','Rate Limited','Challenged','Logged'],
+        datasets:[{data:[47,18,9,6],backgroundColor:['#ff4757','#ffa502','#1e90ff','#2ed573'],borderRadius:4,borderSkipped:false}]},
+      options:{ responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+        scales:{ x:{ticks:{color:'#8b90a0',font:{size:11}}},y:{ticks:{color:'#8b90a0',font:{size:10}},grid:{color:'rgba(255,255,255,0.04)'}} }}
+    });
+  }
+}
+
+function refreshStatsCharts() {
+  [statsTypeChart,statsGeoChart,statsTimeChart,statsActionChart].forEach(c=>c&&c.update());
+}
+
+function renderTopIPs() {
+  const tbody = document.getElementById('topIpsTbody');
+  if(!tbody) return;
+  tbody.innerHTML = TOP_IPS.map(r=>`<tr>
+    <td style="color:var(--text3)">#${r.rank}</td>
+    <td style="color:var(--cyan);font-weight:600">${r.ip}</td>
+    <td>${r.country}</td>
+    <td>${r.type}</td>
+    <td style="font-weight:700;color:var(--red)">${r.hits}</td>
+    <td style="color:var(--text3)">${r.first}</td>
+    <td><span class="status-badge ${r.status}" style="font-size:10px;padding:2px 8px">${r.status}</span></td>
+  </tr>`).join('');
+}
+
+/* ════════════ LIVE UPDATES ════════════ */
+function startLiveUpdates() {
+  setInterval(liveTickFast, 2000);
+  setInterval(liveTickSlow, 8000);
+}
+
+const ATTACK_TYPES = ['SYN Flood','HTTP Flood','UDP Amplification','Slowloris','ICMP Flood','DNS Amplification','Port Scan','NTP Amplification'];
+const ACTIONS = ['Blocked','Blocked','Rate Limited','Challenged','Logged'];
+const SEVERITIES = ['critical','critical','high','high','medium','low'];
+const COUNTRIES = ['🇨🇳 CN','🇷🇺 RU','🇧🇷 BR','🇮🇳 IN','🇺🇸 US','🇩🇪 DE'];
+
+function liveTickFast() {
+  updateTrafficChart();
+  // Update metrics
+  const rps = Math.round(2200 + Math.random()*1200);
+  document.getElementById('m-rps').textContent = rps.toLocaleString();
+  document.getElementById('atk-syn').textContent = Math.round(900+Math.random()*500).toLocaleString();
+  document.getElementById('atk-http').textContent = Math.round(600+Math.random()*400).toLocaleString();
+  document.getElementById('atk-slow').textContent = Math.round(20+Math.random()*40);
+  const bw = (3.5+Math.random()*1.5).toFixed(1);
+  document.getElementById('m-bw').textContent = bw;
+}
+
+function liveTickSlow() {
+  if(Math.random()>.4) generateLiveEvent();
+  if(Math.random()>.8) triggerAlert();
+}
+
+function generateLiveEvent() {
+  const ip = randomIP();
+  const type = ATTACK_TYPES[Math.floor(Math.random()*ATTACK_TYPES.length)];
+  const sev = SEVERITIES[Math.floor(Math.random()*SEVERITIES.length)];
+  const action = ACTIONS[Math.floor(Math.random()*ACTIONS.length)];
+  const rps = Math.floor(Math.random()*15000+100).toLocaleString();
+  const country = COUNTRIES[Math.floor(Math.random()*COUNTRIES.length)];
+  const entry = {time:ts(), ip, country, type, sev, rps, action, detail:'Auto-detected'};
+  addLogEntry(entry);
+  if(sev==='critical'||sev==='high') {
+    if(action==='Blocked' && !blockList.find(b=>b.ip===ip)) {
+      blockList.unshift({ip, reason:type, time:ts()});
+      blockedCount++; updateBlockedCount(); renderBlockList();
+    }
+  }
+}
+
+function addLogEntry(entry) {
+  logEntries.unshift(entry);
+  if(logEntries.length>200) logEntries.pop();
+  renderLogTable();
+}
+
+let alertVisible = false;
+function triggerAlert() {
+  if(alertVisible) return;
+  alertVisible = true;
+  const ip = randomIP();
+  document.getElementById('alertMsg').textContent = '🔴 Critical DDoS Attack: '+ip+' → '+Math.floor(Math.random()*20000+5000).toLocaleString()+' pkt/s';
+  document.getElementById('alertTime').textContent = ts();
+  document.getElementById('alertBanner').classList.add('show');
+  document.getElementById('attackBadge').style.display='flex';
+  if(alertDismissTimer) clearTimeout(alertDismissTimer);
+  alertDismissTimer = setTimeout(()=>{dismissAlert();alertVisible=false;},10000);
+}
+
+function dismissAlert() {
+  document.getElementById('alertBanner').classList.remove('show');
+  document.getElementById('attackBadge').style.display='none';
+  alertVisible=false;
+}
+
+function randomIP() {
+  return [Math.floor(Math.random()*200+10),Math.floor(Math.random()*255),Math.floor(Math.random()*255),Math.floor(Math.random()*255)].join('.');
+}
+
+/* ════════════ NOTIFICATIONS ════════════ */
+function notify(msg, type='info') {
+  const container = document.getElementById('notifContainer');
+  const el = document.createElement('div');
+  el.className = 'notif '+type;
+  el.innerHTML = (type==='error'?'🔴':type==='success'?'✅':'ℹ️')+' <span>'+msg+'</span>';
+  container.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateX(30px)'; el.style.transition='all .3s'; setTimeout(()=>el.remove(),300); },3500);
+}
+
+/* ════════════ EXPORT ════════════ */
+function exportReport() {
+  const report = {
+    exported: new Date().toISOString(),
+    summary: { totalEvents:logEntries.length, blockedIPs:blockedCount, whitelistedIPs:whiteList.length },
+    blockList, whiteList,
+    eventLog: logEntries.slice(0,100),
+    rules: RULES.map(r=>({name:r.name,enabled:r.on,threshold:r.threshold})),
+    settings
+  };
+  downloadJSON(report,'ddos-guard-report-'+Date.now()+'.json');
+  notify('Full report exported as JSON','success');
+}
+
+function download(content, filename, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content],{type:mime}));
+  a.download = filename; a.click();
+}
+function downloadJSON(obj, filename) { download(JSON.stringify(obj,null,2), filename, 'application/json'); }
+
+/* ════════════ HELPERS ════════════ */
+function capitalize(s) { return s ? s.charAt(0).toUpperCase()+s.slice(1) : ''; }
+
+/* ════════════ BOOT ════════════ */
+window.addEventListener('load', init);
+</script>
+</body>
+</html>
